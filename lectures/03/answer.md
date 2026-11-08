@@ -65,7 +65,52 @@
 
 ## 宿題
 
-- 取り組んだレベル：基礎 / 実装 / 発展
+- 取り組んだレベル：発展（a）ADK で作り直す
 - やったこと：
+
+  `adk_agent/glossary_agent/agent.py` と `__init__.py` を追加し、ADK の `Agent` を `root_agent` として定義した。
+
+  指示は `app.agent.INSTRUCTIONS`、ツールは `app.tools` の `search_glossary`・`get_lecture_summary`・演習で追加した `make_quiz` をそのまま読み込む。モデル名も `app.config.MODEL` を共有し、Pydantic AI 版と同じ既定値と `AIE_MODEL` による切り替えを使う。
+
+  `app/`・`pyproject.toml`・`uv.lock` は変更せず、ADK は `uv run --with google-adk` で一時的に追加した。ADK が作るローカルの会話データをコミットしないよう、`.gitignore` に `.adk/` を追加した。
+
 - 結果：
+
+  Python 3.12.12・google-adk 2.14.0 で、次を確認した。
+
+  - `root_agent` を読み込めること。名前は `glossary_agent`、モデルは `gemini-3.5-flash-lite` だった。
+  - 指示とモデル名が共通設定に一致すること。3つの関数から ADK のツール定義を生成でき、docstring と、`query` が文字列・`lecture` が整数という引数の型が反映されること。
+  - `adk run --in_memory adk_agent/glossary_agent` で `Running agent glossary_agent, type exit to exit.` と `[user]:` が表示され、`exit` で正常終了すること。この起動確認では質問を送信していない。
+  - 既存テストは `uv run --frozen pytest -q` で **20 passed**。
+
+  この実行環境では `GEMINI_API_KEY` が未設定だったため、実モデルの回答比較は未実施。以下は比較を進めるための手順で、実行結果ではない。
+
+  Codespaces など、`uv` と環境変数 `GEMINI_API_KEY` が使える環境で、リポジトリ直下から実行する。
+
+  ```bash
+  # Pydantic AI 版：回答とツール呼び出しを記録する
+  uv run --frozen python -m app.agent --trace "LoRAとQLoRAの違いは？"
+
+  # ADK 版：起動後に同じ質問を入力する。終了は exit
+  PYTHONPATH=. uv run --frozen --with google-adk adk run adk_agent/glossary_agent
+  ```
+
+  比較する質問と確認点：
+
+  | 質問 | 確認点 | Pydantic AI 版 | ADK 版 |
+  |---|---|---|---|
+  | AIE2026の講座の宿題にある「3レベル」とは何ですか？ | 基礎・実装・発展の説明と、どれか1つで完了すること | 未実施 | 未実施 |
+  | LoRAとQLoRAの違いは？ | 量子化の説明、第2回の表示、説明の詳しさ | 未実施 | 未実施 |
+  | 第2回の内容から確認問題を1問出して | 問題を1問出し、最初は答えを伏せること | 未実施 | 未実施 |
+
+  各質問は ADK を起動し直して会話の履歴がない状態で比べる。確認問題の用語はランダムに選ばれるので、用語そのものの一致ではなく、指定した回から出題されることと答えの伏せ方を見る。
+
 - 気づき・疑問：
+
+  コード上の違いは、Pydantic AI が `Agent(instructions=INSTRUCTIONS)` と `agent.tool_plain(...)` で指示・ツールを登録するのに対し、ADK は `Agent(instruction=INSTRUCTIONS, tools=[...])` にまとめて渡す点だった。`instructions` と `instruction` の引数名にも違いがある。
+
+  Pydantic AI 版は `run_sync` に実行時のモデルを渡し、自前の CLI から呼ぶ。今回の ADK 版はエージェント定義にモデルを指定し、`root_agent` を `adk run` に読み込ませる。指示とツールの実装を共有できるため、エージェントを組み立てる部分だけを差し替えられた。
+
+  同じ指示・ツール・モデルでも回答が同じになるかは、今回の起動確認だけでは判断できない。実モデルで実行後、上の表に観察した回答を記入する必要がある。
+
+  参照：[ADK Python Quickstart](https://adk.dev/get-started/python/)、[Function tools](https://adk.dev/tools-custom/function-tools/)、[Command Line](https://adk.dev/runtime/command-line/)。
